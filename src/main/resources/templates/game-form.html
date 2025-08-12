@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game Registration</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        .lang-row { display: grid; grid-template-columns: 120px 1fr auto; gap: .5rem; align-items: center; }
+        .lang-list { display: flex; flex-direction: column; gap: .5rem; }
+        .error { color: #b00020; }
+    </style>
+    <script th:inline="javascript">
+        const supportedLanguages = ["EN","KO","JA"];
+        const categories = ["ACTION","ADVENTURE","RPG","SPORTS","PUZZLE","STRATEGY","CASUAL"]; // keep in sync with backend
+        const gameIdFromServer = /*[[${gameId}]]*/ null;
+
+        function option(text, value) { const o = document.createElement('option'); o.text = text; o.value = value; return o; }
+
+        function renderCategorySelect() {
+            const sel = document.getElementById('category');
+            categories.forEach(c => sel.appendChild(option(c, c)));
+        }
+
+        function renderDefaultLanguageSelect() {
+            const sel = document.getElementById('defaultLanguage');
+            supportedLanguages.forEach(l => sel.appendChild(option(l, l)));
+        }
+
+        function addLangRow(language = '', value = '') {
+            const container = document.getElementById('names');
+            const row = document.createElement('div');
+            row.className = 'lang-row';
+            row.innerHTML = `
+                <select class="lang"></select>
+                <input type="text" class="val" placeholder="Game name" />
+                <button type="button" class="contrast remove">Remove</button>
+            `;
+            const langSel = row.querySelector('.lang');
+            supportedLanguages.forEach(l => langSel.appendChild(option(l, l)));
+            if (language) langSel.value = language;
+            row.querySelector('.val').value = value || '';
+            row.querySelector('.remove').addEventListener('click', () => row.remove());
+            container.appendChild(row);
+        }
+
+        async function loadIfEdit() {
+            if (!gameIdFromServer) return;
+            document.getElementById('id').value = gameIdFromServer;
+            document.getElementById('id').readOnly = true;
+            const res = await fetch(`/api/games/${gameIdFromServer}`);
+            if (!res.ok) { alert('Failed to load game'); return; }
+            const g = await res.json();
+            document.getElementById('category').value = g.category;
+            document.getElementById('defaultLanguage').value = g.defaultLanguage;
+            document.getElementById('names').innerHTML = '';
+            for (const n of g.names) addLangRow(n.language, n.value);
+        }
+
+        function validateForm() {
+            const msg = [];
+            const id = document.getElementById('id').value.trim();
+            const category = document.getElementById('category').value;
+            const defaultLanguage = document.getElementById('defaultLanguage').value;
+            const rows = Array.from(document.querySelectorAll('#names .lang-row'));
+            if (!id || !/^[A-Z0-9_\-]+$/.test(id)) msg.push('ID is required (A-Z, 0-9, _, -)');
+            if (!category) msg.push('Category is required');
+            if (rows.length === 0) msg.push('At least one name is required');
+            const langs = new Set();
+            for (const r of rows) {
+                const lang = r.querySelector('.lang').value;
+                const val = r.querySelector('.val').value.trim();
+                if (!val) msg.push(`Name for ${lang} must not be blank`);
+                if (langs.has(lang)) msg.push(`Duplicate language: ${lang}`);
+                langs.add(lang);
+            }
+            if (!langs.has(defaultLanguage)) msg.push('Default language must exist in names');
+            const errorBox = document.getElementById('errors');
+            errorBox.innerHTML = msg.map(m => `<li>${m}</li>`).join('');
+            errorBox.style.display = msg.length ? 'block' : 'none';
+            return msg.length === 0;
+        }
+
+        async function submitForm(e) {
+            e.preventDefault();
+            if (!validateForm()) return;
+            const id = document.getElementById('id').value.trim();
+            const payload = {
+                id,
+                category: document.getElementById('category').value,
+                defaultLanguage: document.getElementById('defaultLanguage').value,
+                names: Array.from(document.querySelectorAll('#names .lang-row')).map(r => ({
+                    language: r.querySelector('.lang').value,
+                    value: r.querySelector('.val').value.trim()
+                }))
+            };
+            const method = gameIdFromServer ? 'PUT' : 'POST';
+            const url = gameIdFromServer ? `/api/games/${id}` : '/api/games';
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.message || 'Submit failed');
+                return;
+            }
+            window.location.href = '/games';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCategorySelect();
+            renderDefaultLanguageSelect();
+            if (!gameIdFromServer) addLangRow('EN', '');
+            loadIfEdit();
+            document.getElementById('addLang').addEventListener('click', () => addLangRow());
+            document.getElementById('gameForm').addEventListener('submit', submitForm);
+        });
+    </script>
+</head>
+<body>
+<main class="container">
+    <h1 th:text="${gameId} == null ? 'Register Game' : 'Edit Game: ' + ${gameId}">Register Game</h1>
+
+    <article class="error" style="display:none">
+        <ul id="errors"></ul>
+    </article>
+
+    <form id="gameForm">
+        <label>
+            ID
+            <input id="id" name="id" type="text" placeholder="e.g. UNCHARTED4 (UPPERCASE)" required />
+        </label>
+        <label>
+            Category
+            <select id="category" name="category" required></select>
+        </label>
+        <label>
+            Default Language
+            <select id="defaultLanguage" name="defaultLanguage" required></select>
+        </label>
+
+        <h3>Names</h3>
+        <div id="names" class="lang-list"></div>
+        <button type="button" id="addLang" class="secondary">Add language</button>
+
+        <footer class="grid">
+            <a role="button" class="secondary" href="/games">Cancel</a>
+            <button type="submit">Save</button>
+        </footer>
+    </form>
+</main>
+</body>
+</html>
+

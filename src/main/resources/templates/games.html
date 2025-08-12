@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game List</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        .actions { display: flex; gap: .5rem; align-items: center; }
+        table td, table th { vertical-align: middle; }
+    </style>
+    <script>
+        const categories = ["ACTION","ADVENTURE","RPG","SPORTS","PUZZLE","STRATEGY","CASUAL"]; // align with backend enum
+        let page = 0, size = 10, q = '', category = '';
+
+        async function fetchGames() {
+            const params = new URLSearchParams({ page, size });
+            if (q) params.append('q', q);
+            if (category) params.append('category', category);
+            const res = await fetch(`/api/games?${params.toString()}`);
+            if (!res.ok) { alert('Failed to load'); return; }
+            const data = await res.json();
+            renderTable(data);
+            renderPager(data);
+        }
+
+        function renderFilters() {
+            const sel = document.getElementById('category');
+            sel.innerHTML = '<option value="">All Categories</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        function renderTable(pageData) {
+            const tbody = document.querySelector('#games tbody');
+            tbody.innerHTML = '';
+            for (const g of pageData.content) {
+                const names = g.names.map(n => `${n.language}: ${n.value}`).join('<br/>');
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" value="${g.id}" class="row-check" /></td>
+                    <td>${g.id}</td>
+                    <td>${g.category}</td>
+                    <td>${g.defaultLanguage}</td>
+                    <td>${names}</td>
+                    <td class="actions">
+                        <a role="button" href="/games/${g.id}/edit">Edit</a>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        function renderPager(pageData) {
+            const prevBtn = document.getElementById('prev');
+            const nextBtn = document.getElementById('next');
+            const info = document.getElementById('pageinfo');
+            prevBtn.disabled = pageData.first;
+            nextBtn.disabled = pageData.last;
+            info.textContent = `Page ${pageData.number + 1} / ${pageData.totalPages || 1}`;
+        }
+
+        async function bulkDelete() {
+            const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => c.value);
+            if (ids.length === 0) { alert('Select at least one'); return; }
+            if (!confirm(`Delete ${ids.length} game(s)?`)) return;
+            const params = new URLSearchParams();
+            ids.forEach(id => params.append('ids', id));
+            const res = await fetch(`/api/games?${params.toString()}`, { method: 'DELETE' });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.message || 'Delete failed'); return; }
+            fetchGames();
+        }
+
+        function initEvents() {
+            document.getElementById('search').addEventListener('input', (e) => { q = e.target.value; page = 0; fetchGames(); });
+            document.getElementById('category').addEventListener('change', (e) => { category = e.target.value; page = 0; fetchGames(); });
+            document.getElementById('prev').addEventListener('click', () => { if (page>0) { page--; fetchGames(); } });
+            document.getElementById('next').addEventListener('click', () => { page++; fetchGames(); });
+            document.getElementById('deleteSelected').addEventListener('click', bulkDelete);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderFilters();
+            initEvents();
+            fetchGames();
+        });
+    </script>
+ </head>
+<body>
+<main class="container">
+    <h1>Game List</h1>
+    <div class="grid">
+        <input id="search" type="search" placeholder="Search by ID or Name" />
+        <select id="category"></select>
+        <div class="actions">
+            <a role="button" href="/games/register">Register New Game</a>
+            <button id="deleteSelected" class="secondary">Delete Selected</button>
+        </div>
+    </div>
+
+    <table id="games">
+        <thead>
+        <tr>
+            <th><input type="checkbox" onclick="document.querySelectorAll('.row-check').forEach(c=>c.checked=this.checked)" /></th>
+            <th>ID</th>
+            <th>Category</th>
+            <th>Default Lang</th>
+            <th>Names</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <nav class="grid">
+        <button id="prev">Prev</button>
+        <span id="pageinfo" style="text-align:center"></span>
+        <button id="next">Next</button>
+    </nav>
+</main>
+</body>
+</html>
+
