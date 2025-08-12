@@ -33,7 +33,7 @@
             row.className = 'lang-row';
             row.innerHTML = `
                 <select class="lang"></select>
-                <input type="text" class="val" placeholder="Game name" />
+                <input type="text" class="val" placeholder="Game name" maxlength="100" />
                 <button type="button" class="contrast remove">Remove</button>
             `;
             const langSel = row.querySelector('.lang');
@@ -64,6 +64,7 @@
             const defaultLanguage = document.getElementById('defaultLanguage').value;
             const rows = Array.from(document.querySelectorAll('#names .lang-row'));
             if (!id || !/^[A-Z0-9_\-]+$/.test(id)) msg.push('ID is required (A-Z, 0-9, _, -)');
+            if (id.length > 64) msg.push('ID must be at most 64 characters');
             if (!category) msg.push('Category is required');
             if (rows.length === 0) msg.push('At least one name is required');
             const langs = new Set();
@@ -71,13 +72,15 @@
                 const lang = r.querySelector('.lang').value;
                 const val = r.querySelector('.val').value.trim();
                 if (!val) msg.push(`Name for ${lang} must not be blank`);
+                if (val.length > 100) msg.push(`Name for ${lang} must be at most 100 characters`);
                 if (langs.has(lang)) msg.push(`Duplicate language: ${lang}`);
                 langs.add(lang);
             }
             if (!langs.has(defaultLanguage)) msg.push('Default language must exist in names');
-            const errorBox = document.getElementById('errors');
-            errorBox.innerHTML = msg.map(m => `<li>${m}</li>`).join('');
-            errorBox.style.display = msg.length ? 'block' : 'none';
+            const errorList = document.getElementById('errors');
+            const errorPanel = document.getElementById('errorPanel');
+            errorList.innerHTML = msg.map(m => `<li>${m}</li>`).join('');
+            errorPanel.style.display = msg.length ? 'block' : 'none';
             return msg.length === 0;
         }
 
@@ -99,7 +102,18 @@
             const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                alert(err.message || 'Submit failed');
+                const msgs = [];
+                if (err.fieldErrors && Array.isArray(err.fieldErrors)) {
+                    for (const fe of err.fieldErrors) msgs.push(`${fe.field}: ${fe.message}`);
+                } else if (err.message) {
+                    msgs.push(err.message);
+                } else {
+                    msgs.push('Submit failed');
+                }
+                const errorList = document.getElementById('errors');
+                const errorPanel = document.getElementById('errorPanel');
+                errorList.innerHTML = msgs.map(m => `<li>${m}</li>`).join('');
+                errorPanel.style.display = 'block';
                 return;
             }
             window.location.href = '/games';
@@ -112,6 +126,9 @@
             loadIfEdit();
             document.getElementById('addLang').addEventListener('click', () => addLangRow());
             document.getElementById('gameForm').addEventListener('submit', submitForm);
+            document.getElementById('id').addEventListener('blur', (e) => {
+                e.target.value = e.target.value.trim().toUpperCase();
+            });
         });
     </script>
 </head>
@@ -119,14 +136,10 @@
 <main class="container">
     <h1 th:text="${gameId} == null ? 'Register Game' : 'Edit Game: ' + ${gameId}">Register Game</h1>
 
-    <article class="error" style="display:none">
-        <ul id="errors"></ul>
-    </article>
-
     <form id="gameForm">
         <label>
             ID
-            <input id="id" name="id" type="text" placeholder="e.g. UNCHARTED4 (UPPERCASE)" required />
+            <input id="id" name="id" type="text" placeholder="e.g. UNCHARTED4 (UPPERCASE)" pattern="^[A-Z0-9_\-]+$" maxlength="64" required />
         </label>
         <label>
             Category
@@ -140,11 +153,16 @@
         <h3>Names</h3>
         <div id="names" class="lang-list"></div>
         <button type="button" id="addLang" class="secondary">Add language</button>
+        <article id="errorPanel" class="error" style="display:none; margin-top: .75rem;">
+            <ul id="errors"></ul>
+        </article>
 
         <footer class="grid">
             <a role="button" class="secondary" href="/games">Cancel</a>
             <button type="submit">Save</button>
         </footer>
+
+
     </form>
 </main>
 </body>
