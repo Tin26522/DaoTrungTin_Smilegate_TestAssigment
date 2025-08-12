@@ -5,7 +5,9 @@ import com.example.daotrungtin_smilegate_testassigment.entity.Category;
 import com.example.daotrungtin_smilegate_testassigment.service.GameService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.*;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.net.URI;
 
 import java.util.List;
 
@@ -32,22 +34,28 @@ public class GameController {
     }
 
     @PostMapping
-    public GameDto create(@RequestBody @Valid GameDto dto) {
-        return service.create(dto);
+    public ResponseEntity<GameDto> create(@RequestBody @Valid GameDto dto) {
+        GameDto created = service.create(dto);
+        return ResponseEntity.created(URI.create("/api/games/" + created.id())).body(created);
     }
 
     @PutMapping("/{id}")
     public GameDto update(@PathVariable String id, @RequestBody @Valid GameDto dto) {
+        if (dto.id() != null && !id.equals(dto.id())) {
+            throw new IllegalArgumentException("Path id and body id must match");
+        }
         return service.update(id, dto);
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable String id) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping
-    public void bulkDelete(@RequestParam List<String> ids) {
+    public ResponseEntity<Void> bulkDelete(@RequestParam List<String> ids) {
         service.deleteAll(ids);
+        return ResponseEntity.noContent().build();
     }
 }
